@@ -51,6 +51,8 @@ format:
 
 library(ggdag) # for creating the dag
 library(tidyverse) # various data management tools
+library(extrafont)
+library(extrafontdb)
 library(usaidplot) # package I made for applying USAID's template download here: https://github.com/jacobpstein/usaid_plot
 
 # set up our dag
@@ -396,7 +398,7 @@ This is a map of depression in Seattle, Washington. We want to understand the re
 ```{r, message=F, warning=FALSE, results="hide"}
 #| echo: false
 #| code-fold: true
-
+#| out-width: 100%
 
 
 # this example is almost entirely from https://crd230.github.io/lab8.html 
@@ -407,7 +409,6 @@ library(tigris)
 library(rmapshaper)
 library(flextable)
 library(car)
-library(stargazer)
 
 # Bring in census tract data. 
 wa.tracts <- get_acs(geography = "tract", 
@@ -460,7 +461,7 @@ sea.tracts <- sea.tracts %>%
 tm_shape(sea.tracts, unit = "mi") +
   tm_polygons(col = "DEP_CrudePrev", style = "quantile",palette = "Reds", 
               border.alpha = 0, title = "") +
-  tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c("right", "bottom")) +
+  tm_scale_bar(breaks = c(0, 2, 4), position = c("right", "bottom")) +
   tm_layout(main.title = "Depression Prevalence, Seattle 2017 ",  main.title.size = 0.95, frame = FALSE, legend.outside = TRUE, 
             attr.outside = TRUE)
 
@@ -486,11 +487,12 @@ We can *map* the residuals of a basic linear model to get a better idea of corre
 ```{r, message=F, warning=FALSE, results="hide"}
 #| echo: false
 #| code-fold: true
+#| out-width: 100%
 
 tm_shape(sea.tracts, unit = "mi") +
   tm_polygons(col = "olsresid", style = "quantile",palette = "Reds", 
               border.alpha = 0, title = "") +
-  tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c("right", "bottom")) +
+  tm_scale_bar(breaks = c(0, 2, 4), position = c("right", "bottom")) +
   tm_layout(main.title = "Residuals from linear regression in Seattle Tracts",  main.title.size = 0.95, frame = FALSE, legend.outside = TRUE,
             attr.outside = TRUE)
 
@@ -532,15 +534,27 @@ lm.morantest(fit.ols.multiple, seaw)
 #| echo: false
 #| code-fold: true
 
+library(jtools)
+
 # fit a spatial error model
 fit.err <- errorsarlm(DEP_CrudePrev ~ unempr + pmob+ pcol + ppov + pnhblk  + 
                       phisp + log(tpop),  
                     data = sea.tracts, 
                     listw = seaw) 
 
-# output table comapring models
-stargazer(fit.ols.multiple, fit.err, type = "html",
-                    title="Title: Regression Results")
+# In addition to the poverty rate ppov, we will include the percent of residents who moved in the past year pmob, percent of 25 year olds with a college degree pcol, unemployment rate unempr, percent non-Hispanic black pnhblk, percent Hispanic phisp, and the log population size
+# output table comparing models
+
+jtools::plot_coefs(fit.ols.multiple, fit.err
+                   , model.names = c("OLS", "Spatial Error Model")
+                   , coefs = c("Unemployment" = "unempr" 
+                               , "Moved in past year" = "pmob" 
+                               , "College degree" = "pcol" 
+                               , "non-Hispanic Black" = "pnhblk"
+                               , "Hispanic" = "phisp" 
+                               , "Population size (log)" = "tpop" 
+                   )
+) + usaid_plot() + theme(axis.text.y = element_text(size = 23, family = "Gill Sans"), axis.text.x = element_text(family = "Gill Sans"), legend.position = "top")
 
 
 ```
@@ -550,8 +564,9 @@ stargazer(fit.ols.multiple, fit.err, type = "html",
 - [Moran's I with Monte-Carlo](https://r-spatial.github.io/spdep/reference/moran.mc.html)
 - [Intro to Spatial Stats](https://paezha.github.io/spatial-analysis-r/)
 - [Bayesian workflows](https://arxiv.org/abs/2011.01808)
+- [Git repo with this deck and code](https://github.com/jacobpstein/GSS_training)
 
 
 ## {.center background-image="space.jpg"}
 
-[*Thank you!*]{.absolute right="50%" top="50%"}
+[*Thank you!*]{.absolute right="75%" top="50%"}

@@ -1,0 +1,557 @@
+---
+title: "Spatial Regression"
+author: "Jacob Patterson-Stein"
+title-slide-attributes:
+  data-background-image: "space.jpg"
+  data-background-size: contain
+  data-background-opacity: "0.3"
+format:
+  revealjs:
+    transition: slide
+    logo: USAID-Identity.png
+    slide-number: true
+    backgroundcolor: "#E7E7E5"
+    fontfamily: Gill Sans
+    embed-resources: true
+    self-contained-math: true
+    fit-text: true
+---
+
+## Agenda
+
+::: incremental
+-   Key points
+-   Does space matter? A quick simulation
+-   A little bit (more) on regression
+-   A real example
+-   Resources
+-   Questions
+:::
+
+## Key Points of This Presentation
+
+-   If you have spatial coordinates or you think there is a theoretical reason why results might be spatially related, you should conduct spatial correlation tests.
+-   Data simulation is an important way to test model specification and understand what might be going on in your data.
+-   Always visualize.
+
+## Estimating a relationship {.smaller}
+
+::: {layout="[ 40, 60 ]"}
+::: {#first-column}
+-   Let's imagine we have a treatment and some outcome, say coffee (treatment) and work performance (outcome).
+-   Literature, prior experience, and our boss suggests this should be a strongly positive, *statistically significant* relationship.
+-   We fit a model to the data to estimate the relationship.
+-   We get a result!
+:::
+
+::: {#second-column}
+```{r}
+#| echo: false
+#| code-fold: true
+
+library(ggdag) # for creating the dag
+library(tidyverse) # various data management tools
+library(usaidplot) # package I made for applying USAID's template download here: https://github.com/jacobpstein/usaid_plot
+
+# set up our dag
+dag <- dagify(
+#specify relationship
+work ~ coffee, 
+  # specify causal question:
+  exposure = "coffee", 
+  outcome = "work",
+
+  # set up labels:
+  # with clearer names
+  labels = c(
+    # causal question
+    "coffee" = "Coffee",
+    "work" = "Improved Work"
+            )
+    )|>
+  tidy_dagitty()
+
+# Visualize
+dag |>
+    filter(name %in% c("coffee", "work")) |>
+    ggdag(text = FALSE) +
+    geom_dag_point(aes(color = name, fill = name), size = 24) + 
+    geom_dag_label_repel(aes(label = label), size = 8) +
+    geom_dag_edges() +
+    theme_dag() +
+    usaid_plot() +
+    theme(panel.grid.major.y = element_blank()
+          , panel.grid.major.x = element_blank()
+            )
+
+```
+:::
+:::
+
+## So you get some data
+
+```{r}
+#| echo: false
+#| code-fold: true
+
+# Load necessary libraries
+library(GGally)
+library(sp)
+library(gstat)
+library(spdep)
+library(spatialreg)
+library(broom)
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Number of points
+n <- 100
+
+# Generate random geographic coordinates
+coords <- data.frame(longitude = runif(n, -100, 100), latitude = runif(n, -100, 100))
+
+# Create a spatial points data frame
+coordinates(coords) <- ~ longitude + latitude
+
+# Generate random continuous covariates
+covariate1 <- rnorm(n, mean = 30, sd = 5)
+covariate2 <- rnorm(n, mean = 70, sd = 15)
+
+# Generate a random continuous treatment variable
+treatment <- rnorm(n, mean = 50, sd = 10)
+
+# Create a spatial weights matrix (using a k-nearest neighbors approach)
+k <- 15
+knn <- knearneigh(coords, k=k)
+nb <- knn2nb(knn)
+listw <- nb2listw(nb, style="W")
+
+# Generate spatially correlated errors
+rho <- 30
+epsilon <- rnorm(n)
+spatially_correlated_errors <- lag.listw(listw, epsilon) * rho + epsilon
+
+# Generate a continuous outcome with spatially correlated errors
+true_beta_treatment <- 0.2
+true_beta_covariate1 <- 0.5
+true_beta_covariate2 <- -0.3
+outcome <- treatment * true_beta_treatment + covariate1 * true_beta_covariate1 + covariate2 * true_beta_covariate2 + spatially_correlated_errors
+
+# Combine into a data frame
+data <- data.frame(
+  longitude = coords$longitude,
+  latitude = coords$latitude,
+  Coffee = treatment,
+  Income = covariate1,
+  Age = covariate2,
+  Work = outcome
+)
+
+ggpairs(data, lower = list(continuous = "smooth", fill = "lightblue",color = "lightblue", mapping = aes(color = "lightblue"))) + usaid_plot()
+
+# how to find k?
+# you find the max number of identical points in the data
+# max_identical_points <- max(table(paste(data$lat, data$long)))
+
+# you can then run this over a function
+# evaluate_k <- function(data, min_k, max_k) {
+#   results <- data.frame(k = min_k:max_k, AIC = NA)
+#   for (k in min_k:max_k) {
+#     nb <- knn2nb(knearneigh(st_coordinates(st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326), k = k)))
+#     listw <- nb2listw(nb, style = "W")
+# 
+#     # Fit the spatial lag model
+#     model <- lagsarlm(Work ~ Coffee + Age + Income, data = data, listw = listw)
+# 
+#     # Store the AIC value
+#     results$AIC[k - min_k + 1] <- AIC(model)
+#   }
+#   return(results)
+# }
+# 
+# # run our function
+# min_k <- max_identical_points
+# max_k <- min_k + 20  # or any other maximum number of neighbors you want to test
+# aic_results <- evaluate_k(data, min_k, max_k)
+# optimal_k <- aic_results[which.min(aic_results$AIC), "k"]
+# then re-run with our optimal k
+# optimal_nb <- knn2nb(knearneigh(st_coordinates(data), k = optimal_k))
+# listw <- nb2listw(optimal_nb, style = "W")
+
+
+```
+
+## When things don't work how they should {.smaller}
+
+Let's say you do all that and look at your model output and the estimate is...[not significant]{.fragment .highlight-red}!
+
+```{r}
+#| echo: false
+#| code-fold: true
+
+# set seed
+set.seed(42)
+
+# Fit a standard linear model
+lm_model <- lm(Work ~ Coffee + Age + Income, data = data) 
+
+broom::tidy(lm_model, conf.int = TRUE) |> 
+    filter(term != "(Intercept)") |> # drop the intercept for ease of visualization
+    ggplot(aes(x = estimate, xmin = conf.low, xmax = conf.high, y = term)) +
+    geom_pointrange(aes(col = estimate), size = 1.5) + 
+    geom_text(aes(label = paste0(round(estimate, 2), "\np=", round(p.value, 2))), family = "Gill Sans", color = "black", vjust = -0.75) +
+    geom_vline(xintercept = 0, linetype = 2) +
+    usaid_plot(data_type = "continuous") + theme(text = element_text(size = 23)) +
+    labs(title = "Linear regression results estimating\nthe coffee-good work relationship"
+    , subtitle = "Coffee appears to have no statistically significant effect on work"
+    , x = "Estimate"
+    , y = "")
+
+```
+
+## Why we might have non-significant results
+
+-   Could be an issue with the number of observations
+-   Could be that we have poor model fit
+-   Could be omitted variable bias
+-   Indeed, there could be any number of things that can plague any model
+
+## Simulation is an important tool for model testing
+
+-   To quote [Gelman, et al (2020)](https://arxiv.org/pdf/2011.01808), simulation helps you understand if you have the right model under different scenarios.
+-   It also allows you to trouble shoot and better understand what is going on.
+-   You can create a "true" effect and then see how well your model actually identifies this effect. If it can't identify this effect, you have more work to do.
+
+## Set some criteria around our question
+
+Specify our model 
+$$
+\operatorname{Work} = \alpha + \beta_{1}(\operatorname{Coffee}) + \epsilon
+$$ 
+Where, the average effect of coffee, $beta_1$, is set at 0.1, and $\epsilon$ is a random error, normally distributed with mean 0, sd of 1. If our model is correctly specified, we should recover this effect.
+
+## Run the model a few thousand times
+
+```{r, message=F, warning=FALSE, results="hide"}
+#| echo: false
+#| code-fold: true
+
+library(rstanarm)
+library(bayesplot)
+
+# sample size
+n <- 1000
+
+# Define true coefficients
+beta_0 <- 2.0
+beta_1 <- 0.1
+beta_2 <- 0.05
+beta_3 <- 0.03
+
+# Generate random data for predictors
+Coffee <- rbinom(n, 1, 0.5)  # Binary variable (0 or 1)
+Age <- rnorm(n, 40, 10)      # Normally distributed around 40 with SD of 10
+Income <- rnorm(n, 50000, 10000) # Normally distributed around 50,000 with SD of 10,000
+
+# Generate the outcome variable with some random noise
+epsilon <- rnorm(n, 0, 0.5)
+Work <- beta_0 + beta_1 * Coffee + beta_2 * Age + beta_3 * Income + epsilon
+
+# Create a data frame
+df <- data.frame(Work, Coffee, Age, Income)
+
+stan_mod <- stan_glm(Work ~ Coffee + Age + Income, data = df)
+
+
+p1 <- mcmc_areas(stan_mod, pars = "Coffee") + 
+    labs(x = "Distribution of Estimates", y = "") + usaid_plot() + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+p1 + 
+  annotate(geom = "text", x = mean(p1$data$x), y = 2, label = paste0("Mean: ", round(mean(p1$data$x), 2)), family = "Gill Sans")
+
+```
+
+## What does this mean?
+
+::: incremental
+-   Our model appears to be generally ok. So what else is going on?
+-   Recall that we also have latitude and longitude columns in our data.
+-   It doesn't seem like we have high amounts of correlation across variables, so there might be something going on in the residual error.
+:::
+
+## Start with the eye test and move to the I test!
+
+Let's look at the residuals of our model along with the spatial lag of residuals (i.e., the residuals of nearest neighbors).
+
+```{r, message=F, warning=FALSE, results="hide"}
+#| echo: false
+#| code-fold: true
+
+# Fit a standard linear model
+lm_model <- lm(Work ~ Coffee + Age + Income, data = data)
+lm_residuals <- residuals(lm_model)
+
+# Conduct Moran's I test on the residuals
+moran_test <- lm.morantest(lm_model, listw)
+# print(moran_test)
+
+# Compute spatial lag of residuals
+spatial_lag_residuals <- lag.listw(listw, lm_residuals)
+
+# Add residuals and spatial lag to the data frame
+data$lm_residuals <- lm_residuals
+data$spatial_lag_residuals <- spatial_lag_residuals
+
+# Create a scatter plot of residuals against their spatial lag
+ggplot(data, aes(x = lm_residuals, y = spatial_lag_residuals)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Scatter Plot of Residuals vs. Spatial Lag of Residuals",
+       x = "Residuals",
+       y = "Spatial Lag of Residuals") +
+  usaid_plot()
+
+```
+
+## Moving to Moran's I Test{.scrollable}
+
+Moran's I test "measures spatial autocorrelation based on both feature locations and feature values simultaneously." Basically, it is a measure of how similar each unit's residual is with some $k$ set of neighbors.
+
+In math: 
+$$
+I = \frac{N}{W} \cdot \frac{\sum_{i=1}^{N} \sum_{j=1}^{N} w_{ij} (x_i - \bar{x})(x_j - \bar{x})}{\sum_{i=1}^{N} (x_i - \bar{x})^2}
+$$
+Where, $N$ is the sample size for unit $i$ across area $j$, $x$ is the variable of interest, $W$ is the weight created through row-wise standardization so that the sum of all of unit $i$'s neighbor's weights is equal to 1. The [ArcGIS documentation](https://pro.arcgis.com/en/pro-app/latest/tool-reference/spatial-statistics/h-how-spatial-autocorrelation-moran-s-i-spatial-st.htm) on this is very good.
+
+## Run Moran's I{.scrollable}
+Let's start with a test that assesses the correlation with a given unit's 15 nearest neighbors. Moran's I is based on a basic hypothesis testing framework, where:
+
+- $H_0: I = E[I]$, a null of no spatial autocorrelation, i.e., I (the correlation between neighbors) is equal to the expected relationship, with, $E[I] = \frac{-1}{n-1}$
+- $H_1: I \neq E[I]$, an alternative hypothesis that spatial correlation is present
+
+A positive Moran's I suggests positive clustering, i.e., units tend to have similar values, while a negative value suggests dispersion different from random.
+```{r}
+#| echo: false
+#| code-fold: true
+
+lm.morantest(lm_model, listw=listw)
+
+# expectation is the expected observed Moran's I
+# variance is the expected variance under the null assumption
+# the Moran sd is the value of the standard deviate from the null for Moran's I
+# p-value is the probability of obtaining a test statistic (Moran's I) at least as extreme as the one observed, assuming the null hypothesis is true for our sample.
+
+```
+
+## More on Moran's I
+
+When we talk about p-values, what we are talking about is the probability of obtaining a Moran's I at least as extreme as the one observed assuming the null is true for our sample. The null implies random distribution of residuals, or the middle box below.
+![](check_clusters.png)
+
+## Let's run our model but with a spatial error regression
+
+```{r}
+#| echo: false
+#| code-fold: true
+
+
+spat_model <- lagsarlm(Work ~ Coffee + Age + Income, data = data, listw = listw)
+
+
+broom::tidy(spat_model, conf.int = TRUE) |> 
+    filter(term != "(Intercept)") |> # drop the intercept for ease of visualization
+    ggplot(aes(x = estimate, xmin = conf.low, xmax = conf.high, y = term)) +
+    geom_pointrange(aes(col = estimate), size = 1.5) + 
+    geom_text(aes(label = paste0(round(estimate, 2), "\np=", round(p.value, 2))), family = "Gill Sans", color = "black", vjust = -0.75) +
+    geom_vline(xintercept = 0, linetype = 2) +
+    usaid_plot(data_type = "continuous") + theme(text = element_text(size = 23)) +
+    labs(title = "Spatial regression results estimating\nthe coffee-good work relationship"
+    , subtitle = "Coffee appears to have a statistically significant effect on work"
+    , x = "Estimate"
+    , y = "")
+
+
+```
+
+## Quick recap{.scrollable}
+
+The spatial error model is essentially adding a weighted residual to account for the fact that there are relationships not controlled for in your original specification.
+
+$$
+{\mathbf y} = {\mathbf X}{\mathbf \beta} + {\mathbf u},
+\qquad {\mathbf u} = \rho_{\mathrm{Err}} {\mathbf W} {\mathbf u} + {\mathbf \varepsilon}
+$$
+
+Put simply, sometimes the omitted variable biasing your results is right there next to you, and your neighbor, and your neighbor's neighbor.
+
+## A real example
+::: {layout="[ 40, 60 ]"}
+::: {#first-column}
+This is a map of depression in Seattle, Washington. We want to understand the relationship between neighborhood characteristics and depression prevalence.
+
+:::
+
+::: {#second-column}
+```{r, message=F, warning=FALSE, results="hide"}
+#| echo: false
+#| code-fold: true
+
+
+
+# this example is almost entirely from https://crd230.github.io/lab8.html 
+
+library(tidycensus)
+library(tmap)
+library(tigris)
+library(rmapshaper)
+library(flextable)
+library(car)
+library(stargazer)
+
+# Bring in census tract data. 
+wa.tracts <- get_acs(geography = "tract", 
+              year = 2019,
+              variables = c(tpop = "B01003_001", tpopr = "B03002_001", 
+                            nhwhite = "B03002_003", nhblk = "B03002_004",
+                             nhasn = "B03002_006", hisp = "B03002_012",
+                            unemptt = "B23025_003", unemp = "B23025_005",
+                            povt = "B17001_001", pov = "B17001_002", 
+                            colt = "B15003_001", col1 = "B15003_022", 
+                            col2 = "B15003_023", col3 = "B15003_024", 
+                            col4 = "B15003_025", mobt = "B07003_001", 
+                            mob1 = "B07003_004"),
+              state = "WA",
+              survey = "acs5",
+              output = "wide",
+              geometry = TRUE)
+
+# calculate percent race/ethnicity, and keep essential vars.
+wa.tracts <- wa.tracts %>% 
+  rename_with(~ sub("E$", "", .x), everything()) %>%  #removes the E 
+  mutate(pnhwhite = 100*(nhwhite/tpopr), pnhasn = 100*(nhasn/tpopr), 
+              pnhblk = 100*(nhblk/tpopr), phisp = 100*(hisp/tpopr),
+              unempr = 100*(unemp/unemptt),
+              ppov = 100*(pov/povt), 
+              pcol = 100*((col1+col2+col3+col4)/colt), 
+              pmob = 100-100*(mob1/mobt)) %>%
+  dplyr::select(c(GEOID,tpop, pnhwhite, pnhasn, pnhblk, phisp, ppov,
+                  unempr, pcol, pmob))  
+
+# Bring in city boundary data
+pl <- places(state = "WA", year = 2019, cb = TRUE)
+
+# Keep Seattle city
+sea.city <- filter(pl, NAME == "Seattle")
+
+#Clip tracts using Seattle boundary
+sea.tracts <- ms_clip(target = wa.tracts, clip = sea.city, remove_slivers = TRUE)
+
+#reproject to UTM NAD 83
+sea.tracts <-st_transform(sea.tracts, 
+                                 crs = "+proj=utm +zone=10 +datum=NAD83 +ellps=GRS80")
+
+cdcfile <- read_csv("https://raw.githubusercontent.com/crd230/data/master/PLACES_WA_2022_release.csv")
+
+sea.tracts <- sea.tracts %>%
+              mutate(GEOID = as.numeric(GEOID)) %>%
+              left_join(cdcfile, by = "GEOID")
+
+tm_shape(sea.tracts, unit = "mi") +
+  tm_polygons(col = "DEP_CrudePrev", style = "quantile",palette = "Reds", 
+              border.alpha = 0, title = "") +
+  tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c("right", "bottom")) +
+  tm_layout(main.title = "Depression Prevalence, Seattle 2017 ",  main.title.size = 0.95, frame = FALSE, legend.outside = TRUE, 
+            attr.outside = TRUE)
+
+# In addition to the poverty rate ppov, we will include the percent of residents who moved in the past year pmob, percent of 25 year olds with a college degree pcol, unemployment rate unempr, percent non-Hispanic black pnhblk, percent Hispanic phisp, and the log population size
+fit.ols.multiple <- lm(DEP_CrudePrev ~ unempr + pmob + pcol + ppov + pnhblk + 
+                phisp + log(tpop), data = sea.tracts)
+
+
+sea.tracts <- sea.tracts %>%
+              mutate(olsresid = resid(fit.ols.multiple))
+
+```
+:::
+:::
+
+## Do we have spatial autocorrelation?
+::: {layout="[ 40, 60 ]"}
+::: {#first-column}
+We can *map* the residuals of a basic linear model to get a better idea of correlation
+:::
+
+::: {#second-column}
+```{r, message=F, warning=FALSE, results="hide"}
+#| echo: false
+#| code-fold: true
+
+tm_shape(sea.tracts, unit = "mi") +
+  tm_polygons(col = "olsresid", style = "quantile",palette = "Reds", 
+              border.alpha = 0, title = "") +
+  tm_scale_bar(breaks = c(0, 2, 4), text.size = 1, position = c("right", "bottom")) +
+  tm_layout(main.title = "Residuals from linear regression in Seattle Tracts",  main.title.size = 0.95, frame = FALSE, legend.outside = TRUE,
+            attr.outside = TRUE)
+
+
+```
+:::
+:::
+
+## Spatial autocorrelation in Seattle
+```{r, message=F, warning=FALSE, results="hide"}
+#| echo: false
+#| code-fold: true
+
+seab <- poly2nb(sea.tracts, queen=T)
+
+seaw <- nb2listw(seab, style="W", zero.policy = TRUE)
+
+moran.plot(as.numeric(scale(sea.tracts$DEP_CrudePrev)), listw=seaw, 
+           xlab="Standardized Depression Prevalence", 
+           ylab="Neighbors Standardized Depression Prevalence",
+           main=c("Moran Scatterplot for Depression Prevalence", "in Seatte") )
+
+```
+
+## Check Moran's I
+
+```{r}
+#| echo: false
+#| code-fold: true
+
+ 
+lm.morantest(fit.ols.multiple, seaw)
+
+
+```
+
+## Regression results
+```{r, message=F, warning=FALSE}
+#| echo: false
+#| code-fold: true
+
+# fit a spatial error model
+fit.err <- errorsarlm(DEP_CrudePrev ~ unempr + pmob+ pcol + ppov + pnhblk  + 
+                      phisp + log(tpop),  
+                    data = sea.tracts, 
+                    listw = seaw) 
+
+# output table comapring models
+stargazer(fit.ols.multiple, fit.err, type = "html",
+                    title="Title: Regression Results")
+
+
+```
+
+## More advanced stuff and other materials
+- [Integrated Nested Laplace Approximation](https://www.r-inla.org/what-is-inla)
+- [Moran's I with Monte-Carlo](https://r-spatial.github.io/spdep/reference/moran.mc.html)
+- [Intro to Spatial Stats](https://paezha.github.io/spatial-analysis-r/)
+- [Bayesian workflows](https://arxiv.org/abs/2011.01808)
+
+
+## {.center background-image="space.jpg"}
+
+[*Thank you!*]{.absolute right="50%" top="50%"}

@@ -52,8 +52,8 @@ format:
 
 library(ggdag) # for creating the dag
 library(tidyverse) # various data management tools
-library(extrafont)
-library(extrafontdb)
+library(extrafont) # load fonts
+library(extrafontdb) # really load those fonts
 library(usaidplot) # package I made for applying USAID's template download here: https://github.com/jacobpstein/usaid_plot
 
 # set up our dag
@@ -98,12 +98,12 @@ dag |>
 #| code-fold: true
 
 # Load necessary libraries
-library(GGally)
-library(sp)
-library(gstat)
-library(spdep)
-library(spatialreg)
-library(broom)
+library(GGally) # for our pair plot
+library(sp) # spatial package
+library(gstat) # spatial stats
+library(spdep) # for neighbor stats
+library(spatialreg) # spatial error model
+library(broom) # clean up our results
 
 # Set seed for reproducibility
 set.seed(42)
@@ -238,8 +238,8 @@ $$ Where, the average effect of coffee, $beta_1$, is set at 0.1, and $\epsilon$ 
 #| echo: false
 #| code-fold: true
 
-library(rstanarm)
-library(bayesplot)
+library(rstanarm) # run a basic bayes model
+library(bayesplot) # visualize our output
 
 # sample size
 n <- 1000
@@ -257,14 +257,17 @@ Income <- rnorm(n, 50000, 10000) # Normally distributed around 50,000 with SD of
 
 # Generate the outcome variable with some random noise
 epsilon <- rnorm(n, 0, 0.5)
+
+# create our outcome
 Work <- beta_0 + beta_1 * Coffee + beta_2 * Age + beta_3 * Income + epsilon
 
 # Create a data frame
 df <- data.frame(Work, Coffee, Age, Income)
 
+# run weakly informed linear model with defaults
 stan_mod <- stan_glm(Work ~ Coffee + Age + Income, data = df)
 
-
+# pull out MCMC runs
 p1 <- mcmc_areas(stan_mod, pars = "Coffee") + 
     labs(x = "Distribution of Estimates", y = "") + usaid_plot() + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
@@ -355,8 +358,8 @@ When we talk about p-values, what we are talking about is the probability of obt
 #| echo: false
 #| code-fold: true
 
-
-spat_model <- lagsarlm(Work ~ Coffee + Age + Income, data = data, listw = listw)
+# run a spatial error model
+spat_model <- errorsarlm(Work ~ Coffee + Age + Income, data = data, listw = listw)
 
 
 broom::tidy(spat_model, conf.int = TRUE) |> 
@@ -404,12 +407,11 @@ This is a map of depression in Seattle, Washington. We want to understand the re
 
 # this example is almost entirely from https://crd230.github.io/lab8.html 
 
-library(tidycensus)
-library(tmap)
-library(tigris)
-library(rmapshaper)
-library(flextable)
-library(car)
+library(tidycensus) # get census data
+library(tmap) #map
+library(tigris) # aesthetics
+library(rmapshaper) # more map help
+library(car) # lienar regression helper
 
 # Bring in census tract data. 
 wa.tracts <- get_acs(geography = "tract", 
@@ -543,10 +545,10 @@ lm.morantest(fit.ols.multiple, seaw)
 #| echo: false
 #| code-fold: true
 
-library(jtools)
+library(jtools) #visuali
 
-# fit a spatial error model
-fit.err <- errorsarlm(DEP_CrudePrev ~ unempr + pmob+ pcol + ppov + pnhblk  + 
+# fit a spatial lag model
+fit.err <- lagsarlm(DEP_CrudePrev ~ unempr + pmob+ pcol + ppov + pnhblk  + 
                       phisp + log(tpop),  
                     data = sea.tracts, 
                     listw = seaw) 

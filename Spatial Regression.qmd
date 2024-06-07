@@ -15,6 +15,7 @@ format:
     embed-resources: true
     self-contained-math: true
     fit-text: true
+    code-fold: true
 ---
 
 ## Agenda

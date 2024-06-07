@@ -228,11 +228,9 @@ broom::tidy(lm_model, conf.int = TRUE) |>
 
 ## Set some criteria around our question
 
-Specify our model 
-$$
+Specify our model $$
 \operatorname{Work} = \alpha + \beta_{1}(\operatorname{Coffee}) + \epsilon
-$$ 
-Where, the average effect of coffee, $beta_1$, is set at 0.1, and $\epsilon$ is a random error, normally distributed with mean 0, sd of 1. If our model is correctly specified, we should recover this effect.
+$$ Where, the average effect of coffee, $beta_1$, is set at 0.1, and $\epsilon$ is a random error, normally distributed with mean 0, sd of 1. If our model is correctly specified, we should recover this effect.
 
 ## Run the model a few thousand times
 
@@ -317,23 +315,23 @@ ggplot(data, aes(x = lm_residuals, y = spatial_lag_residuals)) +
 
 ```
 
-## Moving to Moran's I Test{.scrollable}
+## Moving to Moran's I Test {.scrollable}
 
 Moran's I test "measures spatial autocorrelation based on both feature locations and feature values simultaneously." Basically, it is a measure of how similar each unit's residual is with some $k$ set of neighbors.
 
-In math: 
-$$
+In math: $$
 I = \frac{N}{W} \cdot \frac{\sum_{i=1}^{N} \sum_{j=1}^{N} w_{ij} (x_i - \bar{x})(x_j - \bar{x})}{\sum_{i=1}^{N} (x_i - \bar{x})^2}
-$$
-Where, $N$ is the sample size for unit $i$ across area $j$, $x$ is the variable of interest, $W$ is the weight created through row-wise standardization so that the sum of all of unit $i$'s neighbor's weights is equal to 1. The [ArcGIS documentation](https://pro.arcgis.com/en/pro-app/latest/tool-reference/spatial-statistics/h-how-spatial-autocorrelation-moran-s-i-spatial-st.htm) on this is very good.
+$$ Where, $N$ is the sample size for unit $i$ across area $j$, $x$ is the variable of interest, $W$ is the weight created through row-wise standardization so that the sum of all of unit $i$'s neighbor's weights is equal to 1. The [ArcGIS documentation](https://pro.arcgis.com/en/pro-app/latest/tool-reference/spatial-statistics/h-how-spatial-autocorrelation-moran-s-i-spatial-st.htm) on this is very good.
 
-## Run Moran's I{.scrollable}
+## Run Moran's I {.scrollable}
+
 Let's start with a test that assesses the correlation with a given unit's 15 nearest neighbors. Moran's I is based on a basic hypothesis testing framework, where:
 
-- $H_0: I = E[I]$, a null of no spatial autocorrelation, i.e., I (the correlation between neighbors) is equal to the expected relationship, with, $E[I] = \frac{-1}{n-1}$
-- $H_1: I \neq E[I]$, an alternative hypothesis that spatial correlation is present
+-   $H_0: I = E[I]$, a null of no spatial autocorrelation, i.e., I (the correlation between neighbors) is equal to the expected relationship, with, $E[I] = \frac{-1}{n-1}$
+-   $H_1: I \neq E[I]$, an alternative hypothesis that spatial correlation is present
 
 A positive Moran's I suggests positive clustering, i.e., units tend to have similar values, while a negative value suggests dispersion different from random.
+
 ```{r}
 #| echo: false
 #| code-fold: true
@@ -349,8 +347,7 @@ lm.morantest(lm_model, listw=listw)
 
 ## More on Moran's I
 
-When we talk about p-values, what we are talking about is the probability of obtaining a Moran's I at least as extreme as the one observed assuming the null is true for our sample. The null implies random distribution of residuals, or the middle box below.
-![](check_clusters.png)
+When we talk about p-values, what we are talking about is the probability of obtaining a Moran's I at least as extreme as the one observed assuming the null is true for our sample. The null implies random distribution of residuals, or the middle box below. ![](check_clusters.png)
 
 ## Let's run our model but with a spatial error regression
 
@@ -377,7 +374,7 @@ broom::tidy(spat_model, conf.int = TRUE) |>
 
 ```
 
-## Quick recap{.scrollable}
+## Quick recap {.scrollable}
 
 The spatial error model is essentially adding a weighted residual to account for the fact that there are relationships not controlled for in your original specification.
 
@@ -389,13 +386,16 @@ $$
 Put simply, sometimes the omitted variable biasing your results is right there next to you, and your neighbor, and your neighbor's neighbor.
 
 ## A real example
+
 ::: {layout="[ 40, 60 ]"}
-::: {#first-column}
+<div>
+
 This is a map of depression in Seattle, Washington. We want to understand the relationship between neighborhood characteristics and depression prevalence.
 
-:::
+</div>
 
-::: {#second-column}
+<div>
+
 ```{r, message=F, warning=FALSE, results="hide"}
 #| echo: false
 #| code-fold: true
@@ -475,16 +475,21 @@ sea.tracts <- sea.tracts %>%
               mutate(olsresid = resid(fit.ols.multiple))
 
 ```
-:::
+
+</div>
 :::
 
 ## Do we have spatial autocorrelation?
-::: {layout="[ 40, 60 ]"}
-::: {#first-column}
-We can *map* the residuals of a basic linear model to get a better idea of correlation
-:::
 
-::: {#second-column}
+::: {layout="[ 40, 60 ]"}
+<div>
+
+We can *map* the residuals of a basic linear model to get a better idea of correlation
+
+</div>
+
+<div>
+
 ```{r, message=F, warning=FALSE, results="hide"}
 #| echo: false
 #| code-fold: true
@@ -499,10 +504,12 @@ tm_shape(sea.tracts, unit = "mi") +
 
 
 ```
-:::
+
+</div>
 :::
 
 ## Spatial autocorrelation in Seattle
+
 ```{r, message=F, warning=FALSE, results="hide"}
 #| echo: false
 #| code-fold: true
@@ -531,6 +538,7 @@ lm.morantest(fit.ols.multiple, seaw)
 ```
 
 ## Regression results
+
 ```{r, message=F, warning=FALSE}
 #| echo: false
 #| code-fold: true
@@ -562,13 +570,13 @@ jtools::plot_coefs(fit.ols.multiple, fit.err
 ```
 
 ## More advanced stuff and other materials
-- [Integrated Nested Laplace Approximation](https://www.r-inla.org/what-is-inla)
-- [Moran's I with Monte-Carlo](https://r-spatial.github.io/spdep/reference/moran.mc.html)
-- [Intro to Spatial Stats](https://paezha.github.io/spatial-analysis-r/)
-- [Bayesian workflows](https://arxiv.org/abs/2011.01808)
-- [Git repo with this deck and code](https://github.com/jacobpstein/GSS_training)
 
+-   [Integrated Nested Laplace Approximation](https://www.r-inla.org/what-is-inla)
+-   [Moran's I with Monte-Carlo](https://r-spatial.github.io/spdep/reference/moran.mc.html)
+-   [Intro to Spatial Stats](https://paezha.github.io/spatial-analysis-r/)
+-   [Bayesian workflows](https://arxiv.org/abs/2011.01808)
+-   [Git repo with this deck and code](https://github.com/jacobpstein/GSS_training)
 
-## {.center background-image="space.jpg"}
+##  {.center background-image="space.jpg" style="color: white;"}
 
-[*Thank you!*]{.absolute right="75%" top="50%"}
+[*Thank you!*]{.absolute right="50%" top="50%"}

@@ -554,7 +554,8 @@ jtools::plot_coefs(fit.ols.multiple, fit.err
                                , "Hispanic" = "phisp" 
                                , "Population size (log)" = "tpop" 
                    )
-) + usaid_plot() + theme(axis.text.y = element_text(size = 23, family = "Gill Sans"), axis.text.x = element_text(family = "Gill Sans"), legend.position = "top")
+) + usaid_plot() + theme(axis.text.y = element_text(size = 23, family = "Gill Sans"), axis.text.x = element_text(family = "Gill Sans"), legend.position = "top") +guides(color="none")
+
 
 
 ```

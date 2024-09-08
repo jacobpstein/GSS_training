@@ -1,5 +1,5 @@
 # Spatial Regression (a gentle intro)
-A repo for presentation materials on spatial regression to the Ghana Statistical Service.
+A repo for presentation materials on spatial regression to the Ghana Statistical Service. The presentation as given can be found [here](https://jacobpstein.github.io/GSS_training/#/title-slide).
 
 Many of the resources from this session come from the much smarter folks at various universities. Please check out the following links:
 
